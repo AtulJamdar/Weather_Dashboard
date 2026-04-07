@@ -2,6 +2,8 @@ package com.example.weatherdashboard;
 
 import java.util.Map;
 import java.util.HashMap;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,21 +26,24 @@ public class WeatherController {
             return (Map<String, Object>) cache.get(city);
         }
 
-        String url = "http://127.0.0.1:8000/weather/" + city;
-
         try {
+            // Properly URL-encode the city name to handle special characters
+            String encodedCity = URLEncoder.encode(city.trim(), StandardCharsets.UTF_8);
+            String url = "http://127.0.0.1:8000/weather/" + encodedCity;
+
             Map<String, Object> response = restTemplate.getForObject(url, Map.class);
 
             if (response == null) {
-                return Map.of("error", "No response from Python service");
+                return Map.of("status", "error", "message", "No response from Python service");
             }
 
             cache.put(city, response);
-            return response; // don't remap keys unnecessarily
+            return response;
 
         } catch (Exception e) {
             return Map.of(
-                "error", "Failed to call Python API",
+                "status", "error",
+                "message", "Failed to fetch weather data",
                 "details", e.getMessage()
             );
         }
@@ -46,7 +51,13 @@ public class WeatherController {
 
     @GetMapping("/history/{city}")
     public Object getHistory(@PathVariable String city) {
-        String url = "http://127.0.0.1:8000/history/" + city;
-        return restTemplate.getForObject(url, Object.class);
+        try {
+            // Properly URL-encode the city name
+            String encodedCity = URLEncoder.encode(city.trim(), StandardCharsets.UTF_8);
+            String url = "http://127.0.0.1:8000/history/" + encodedCity;
+            return restTemplate.getForObject(url, Object.class);
+        } catch (Exception e) {
+            return Map.of("error", "Failed to fetch history: " + e.getMessage());
+        }
     }
 }

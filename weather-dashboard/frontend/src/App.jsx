@@ -54,10 +54,20 @@ function App() {
   const fetchHistory = async () => {
     try {
       const res = await fetch(`http://localhost:8080/api/history/${encodeURIComponent(city.trim())}`);
-      const data = await res.json();
-      setHistory(data);
+      const responseData = await res.json();
+      
+      // Check if response is an array (valid history data)
+      if (Array.isArray(responseData)) {
+        setHistory(responseData);
+      } else if (responseData.error) {
+        console.warn("History error:", responseData.error);
+        setHistory([]);  // Set empty array so chart won't show
+      } else {
+        setHistory([]);
+      }
     } catch (err) {
       console.error("Failed to fetch history:", err);
+      setHistory([]);
     }
   };
 
@@ -97,18 +107,40 @@ function App() {
             <p style={styles.aiText}>{data.ai_insight || "No summary available."}</p>
           </div>
 
-          {history.length > 0 && (
-            <div style={styles.chartContainer}>
-              <h3>Temperature History (Last 24 Hours)</h3>
-              <LineChart width={600} height={300} data={history}>
-                <XAxis dataKey="time" />
-                <YAxis />
-                <Tooltip />
-                <CartesianGrid stroke="#ccc" />
-                <Line type="monotone" dataKey="temp" stroke="#2563eb" />
-              </LineChart>
-            </div>
-          )}
+          <div style={styles.chartContainer}>
+            <h3 style={styles.chartTitle}>📊 Temperature History (Last 24 Hours)</h3>
+            {history && history.length > 0 ? (
+              <>
+                <LineChart width={600} height={300} data={history}>
+                  <XAxis 
+                    dataKey="time" 
+                    tick={{ fontSize: 12 }}
+                    angle={-45}
+                    textAnchor="end"
+                    height={100}
+                  />
+                  <YAxis label={{ value: 'Temperature (°C)', angle: -90, position: 'insideLeft' }} />
+                  <Tooltip 
+                    formatter={(value) => `${value}°C`}
+                    labelFormatter={(label) => `Time: ${label}`}
+                  />
+                  <CartesianGrid stroke="#ccc" />
+                  <Line 
+                    type="monotone" 
+                    dataKey="temp" 
+                    stroke="#2563eb" 
+                    strokeWidth={2}
+                    dot={{ fill: '#2563eb', r: 4 }}
+                  />
+                </LineChart>
+                <p style={styles.chartNote}>Chart shows temperature variations across time periods</p>
+              </>
+            ) : (
+              <div style={styles.noChartData}>
+                <p>Loading chart data...</p>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -200,6 +232,26 @@ const styles = {
   chartContainer: {
     marginTop: "30px",
     textAlign: "center",
+    padding: "20px",
+    borderRadius: "10px",
+    background: "#f0f9ff",
+    border: "1px solid #bfdbfe",
+  },
+  chartTitle: {
+    color: "#1e40af",
+    marginTop: 0,
+    marginBottom: "15px",
+  },
+  chartNote: {
+    color: "#64748b",
+    fontSize: "13px",
+    marginTop: "10px",
+    fontStyle: "italic",
+  },
+  noChartData: {
+    padding: "40px 20px",
+    color: "#64748b",
+    fontSize: "14px",
   },
 };
 
