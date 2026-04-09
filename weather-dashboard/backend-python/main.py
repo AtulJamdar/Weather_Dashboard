@@ -24,13 +24,8 @@ app.add_middleware(
 )
 
 # --- CONFIGURATION ---
-# Your OpenWeatherMap API Key
 WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
-
-# Your Groq API Key
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-
-# Database Configuration
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 engine = create_engine(DATABASE_URL)
@@ -39,20 +34,24 @@ SessionLocal = sessionmaker(bind=engine)
 # Initialize Groq Client
 client = Groq(api_key=GROQ_API_KEY)
 
-@app.get("/")
-def read_root():
-    return {
-        "status": "online",
-        "service": "Weather Insight API",
-        "endpoints": {
-            "weather": "/weather/{city}"
-        }
-    }
+# --- HELPERS ---
+
+def get_mock_data():
+    """Generates 12 points of fake data if DB is empty or fails."""
+    now = datetime.datetime.now()
+    mock_data = []
+    for i in range(12):
+        temp = 20 + (i % 5) + (2 if i % 2 == 0 else -1)
+        time_offset = datetime.timedelta(hours=i*2)
+        mock_data.append({
+            "time": (now - time_offset).strftime("%Y-%m-%d %H:%M"),
+            "temp": float(temp)
+        })
+    return mock_data[::-1]
+
+# --- CORE FUNCTIONS ---
 
 def get_weather(city: str):
-    """
-    Fetches raw weather data from OpenWeatherMap.
-    """
     url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={WEATHER_API_KEY}&units=metric"
     try:
         response = requests.get(url)
@@ -61,9 +60,6 @@ def get_weather(city: str):
         return {"error": str(e)}
 
 def generate_weather_summary(data):
-    """
-    Uses Llama 3.3 via Groq to provide human-friendly insights.
-    """
     prompt = f"""
     Weather Data for {data['city']}:
     - Temperature: {data['temperature']}°C
@@ -73,8 +69,6 @@ def generate_weather_summary(data):
     Provide a very short, 2-sentence human-friendly summary. 
     Include one practical tip (like what to wear or if an umbrella is needed).
     """
-
-    # Using llama-3.3-70b-versatile (llama3-8b-8192 is decommissioned)
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[
@@ -83,46 +77,50 @@ def generate_weather_summary(data):
         ],
         temperature=0.7
     )
-
     return response.choices[0].message.content
 
 def save_to_db(data):
+    db = SessionLocal()
     try:
-        db = SessionLocal()
-        try:
-            db.execute(
-                text("""
-                INSERT INTO weather_history (city, temperature, humidity, description)
-                VALUES (:city, :temp, :humidity, :desc)
-                """),
-                {
-                    "city": data["city"],
-                    "temp": data["temperature"],
-                    "humidity": data["humidity"],
-                    "desc": data["description"]
-                }
-            )
-            db.commit()
-        finally:
-            db.close()
+        db.execute(
+            text("""
+            INSERT INTO weather_history (city, temperature, humidity, description)
+            VALUES (:city, :temp, :humidity, :desc)
+            """),
+            {
+                "city": data["city"],
+                "temp": data["temperature"],
+                "humidity": data["humidity"],
+                "desc": data["description"]
+            }
+        )
+        db.commit()
     except Exception as e:
-        print(f"Database save error: {str(e)}")  # Log the error
+        print(f"Database save error: {str(e)}")
+    finally:
+        db.close()
+
+# --- ENDPOINTS ---
+
+@app.get("/")
+def read_root():
+    return {
+        "status": "online",
+        "service": "Weather Insight API",
+        "endpoints": {"weather": "/weather/{city}", "history": "/history/{city}"}
+    }
 
 @app.get("/weather/{city}")
 def fetch_weather(city: str):
-    # 1. Get raw data from OpenWeatherMap
     weather_data = get_weather(city)
     
-    # 2. Check if Weather API is authorized/active
     if "cod" in weather_data and str(weather_data["cod"]) != "200":
         return {
             "status": "error",
-            "source": "OpenWeatherMap",
             "message": weather_data.get("message", "API Error"),
-            "hint": "If 'Invalid API Key', wait 60 minutes for activation or check your email verification."
+            "hint": "Check if your OpenWeather API key is active."
         }
     
-    # 3. Structure the data for the AI
     cleaned_data = {
         "city": city,
         "temperature": weather_data["main"]["temp"],
@@ -130,16 +128,13 @@ def fetch_weather(city: str):
         "description": weather_data["weather"][0]["description"]
     }
 
-    # Save to database
     save_to_db(cleaned_data)
 
-    # 4. Generate AI Summary with Groq
     try:
         summary = generate_weather_summary(cleaned_data)
     except Exception as e:
-        summary = f"AI Insight temporarily unavailable. Error: {str(e)}"
+        summary = f"AI Insight temporarily unavailable."
 
-    # 5. Return combined response
     return {
         "city": city.capitalize(),
         "temperature": f"{cleaned_data['temperature']}°C",
@@ -150,68 +145,55 @@ def fetch_weather(city: str):
 
 @app.get("/history/{city}")
 def get_history(city: str):
+    db = SessionLocal()
     try:
-        db = SessionLocal()
-        try:
-            # Case-insensitive city search
-            result = db.execute(
-                text("""
-                SELECT temperature, created_at
-                FROM weather_history
-                WHERE LOWER(city) = LOWER(:city)
-                AND created_at >= NOW() - INTERVAL '24 HOURS'
-                ORDER BY created_at
-                """),
-                {"city": city.strip()}
-            ).fetchall()
+        # Fetch last 24 hours of data
+        result = db.execute(
+            text("""
+            SELECT temperature, created_at
+            FROM weather_history
+            WHERE LOWER(city) = LOWER(:city)
+            AND created_at >= NOW() - INTERVAL '24 HOURS'
+            ORDER BY created_at ASC
+            """),
+            {"city": city.strip()}
+        ).fetchall()
 
-            if not result:
-                # Return mock data if no real data in database
-                now = datetime.datetime.now()
-                mock_data = []
-                for i in range(12):  # Generate 12 mock data points (2-hour intervals)
-                    temp = 20 + (i % 5) + (2 if i % 2 == 0 else -1)
-                    time_offset = datetime.timedelta(hours=i*2)
-                    mock_data.append({
-                        "time": (now - time_offset).strftime("%Y-%m-%d %H:%M"),
-                        "temp": float(temp)
-                    })
-                return mock_data[::-1]  # Reverse to show oldest first
+        if not result:
+            return get_mock_data()
 
-            return [
-                {"time": str(row[1]), "temp": float(row[0])}
-                for row in result
-            ]
-        finally:
-            db.close()
-    except Exception as e:
-        print(f"History DB Error: {str(e)}")
-        # Return mock data if database connection fails
-        now = datetime.datetime.now()
-        mock_data = []
-        for i in range(12):
-            temp = 20 + (i % 5) + (2 if i % 2 == 0 else -1)
-            time_offset = datetime.timedelta(hours=i*2)
-            mock_data.append({
-                "time": (now - time_offset).strftime("%Y-%m-%d %H:%M"),
+        # Formatting rows into JSON-ready list
+        history_list = []
+        for row in result:
+            # handle both indexed (row[1]) and mapped (row.created_at) access
+            timestamp = row[1] if isinstance(row[1], datetime.datetime) else row.created_at
+            temp = row[0] if isinstance(row[0], (int, float)) else row.temperature
+            
+            history_list.append({
+                "time": timestamp.strftime("%H:%M"), # Just time for cleaner charts
                 "temp": float(temp)
             })
-        return mock_data[::-1]
+        return history_list
+
+    except Exception as e:
+        print(f"History DB Error: {str(e)}")
+        return get_mock_data()
+    finally:
+        db.close()
+
+# --- SCHEDULER ---
 
 def fetch_and_store():
     cities = ["pune", "mumbai", "delhi"]
-
     for city in cities:
         data = get_weather(city)
-
-        if "error" not in data:
+        if "error" not in data and data.get("cod") == 200:
             cleaned = {
                 "city": city,
                 "temperature": data["main"]["temp"],
                 "humidity": data["main"]["humidity"],
                 "description": data["weather"][0]["description"]
             }
-
             save_to_db(cleaned)
 
 scheduler = BackgroundScheduler()
