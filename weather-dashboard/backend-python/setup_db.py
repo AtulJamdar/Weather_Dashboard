@@ -14,6 +14,12 @@ if not DATABASE_URL:
     print("ERROR: DATABASE_URL not set in .env file")
     exit(1)
 
+# --- FIX FOR NEON / SQLALCHEMY COMPATIBILITY ---
+# Neon provides links starting with postgres://, but SQLAlchemy requires postgresql://
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+# -----------------------------------------------
+
 print(f"Connecting to database: {DATABASE_URL}")
 
 try:
@@ -61,8 +67,7 @@ try:
 except Exception as e:
     print(f"❌ Database connection failed: {str(e)}")
     print("\nMake sure:")
-    print("1. PostgreSQL is running")
-    print("2. Database 'weatherdb' exists")
-    print("3. .env file has correct DATABASE_URL")
-    print("4. Example: DATABASE_URL=postgresql://postgres:password@localhost:5432/weatherdb")
+    print("1. Your Neon project is active (not paused)")
+    print("2. The connection string in .env is correct")
+    print("3. You have internet access to reach the Neon cloud")
     exit(1)
