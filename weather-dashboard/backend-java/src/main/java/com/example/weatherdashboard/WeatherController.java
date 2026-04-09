@@ -5,18 +5,13 @@ import java.util.HashMap;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
-import org.springframework.web.bind.annotation.CrossOrigin;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.web.bind.annotation.CrossOrigin;
 
-@CrossOrigin(origins = "http://localhost:5173")
+// This allows your Vercel frontend to access this API
+@CrossOrigin(origins = "*") 
 @RestController
 @RequestMapping("/api")
-@CrossOrigin(origins = "https://weather-dashboard-1-tnkh.onrender.com/") // Add your Vercel URL here
 public class WeatherController {
 
     private final RestTemplate restTemplate = new RestTemplate();
@@ -29,8 +24,8 @@ public class WeatherController {
         }
 
         try {
-            // Properly URL-encode the city name to handle special characters
             String encodedCity = URLEncoder.encode(city.trim(), StandardCharsets.UTF_8);
+            // Calling your LIVE Python Backend
             String url = "https://weather-dashboard-iidt.onrender.com/weather/" + encodedCity;
 
             Map<String, Object> response = restTemplate.getForObject(url, Map.class);
@@ -54,9 +49,9 @@ public class WeatherController {
     @GetMapping("/history/{city}")
     public Object getHistory(@PathVariable String city) {
         try {
-            // Properly URL-encode the city name
             String encodedCity = URLEncoder.encode(city.trim(), StandardCharsets.UTF_8);
-            String url = "http://127.0.0.1:8000/history/" + encodedCity;
+            // Fixed: Changed from localhost to your live Python Render URL
+            String url = "https://weather-dashboard-iidt.onrender.com/history/" + encodedCity;
             return restTemplate.getForObject(url, Object.class);
         } catch (Exception e) {
             return Map.of("error", "Failed to fetch history: " + e.getMessage());
