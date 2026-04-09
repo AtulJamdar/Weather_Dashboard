@@ -29,7 +29,7 @@ public class WeatherController {
         try {
             // Properly URL-encode the city name to handle special characters
             String encodedCity = URLEncoder.encode(city.trim(), StandardCharsets.UTF_8);
-            String url = "http://127.0.0.1:8000/weather/" + encodedCity;
+            String url = "https://weather-dashboard-iidt.onrender.com/weather/" + encodedCity;
 
             Map<String, Object> response = restTemplate.getForObject(url, Map.class);
 
