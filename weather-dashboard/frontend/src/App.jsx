@@ -53,7 +53,7 @@ function App() {
 
   const fetchHistory = async () => {
     try {
-      const res = await fetch(`http://localhost:8080/api/history/${encodeURIComponent(city.trim())}`);
+      const res = await fetch(`https://weather-dashboard-1-tnkh.onrender.com/api/weather/${encodeURIComponent(city.trim())}`);
       const responseData = await res.json();
       
       // Check if response is an array (valid history data)
