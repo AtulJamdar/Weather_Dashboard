@@ -15,6 +15,7 @@ import org.springframework.web.client.RestTemplate;
 @CrossOrigin(origins = "http://localhost:5173")
 @RestController
 @RequestMapping("/api")
+@CrossOrigin(origins = "https://weather-dashboard-1-tnkh.onrender.com/") // Add your Vercel URL here
 public class WeatherController {
 
     private final RestTemplate restTemplate = new RestTemplate();
