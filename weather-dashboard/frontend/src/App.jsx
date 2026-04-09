@@ -28,7 +28,7 @@ function App() {
     try {
       // Calling your Java Backend on Port 8080
       const res = await fetch(
-        `http://localhost:8080/api/weather/${encodeURIComponent(city.trim())}`
+        `https://weather-dashboard-1-tnkh.onrender.com/api/weather/${encodeURIComponent(city.trim())}`
       );
 
       if (!res.ok) {
